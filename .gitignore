@@ -1,0 +1,8 @@
+.env
+data/
+__pycache__/
+*.pyc
+*.pyo
+venv/
+bot_output.txt
+test_*.py

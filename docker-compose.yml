@@ -1,0 +1,9 @@
+services:
+  bot:
+    build:
+      context: .
+      dockerfile: finance_bot/Dockerfile
+    env_file: finance_bot/.env
+    volumes:
+      - ./data:/app/finance_bot/data
+    restart: always
