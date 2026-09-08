@@ -1,6 +1,5 @@
 import csv
 import io
-from datetime import datetime
 from aiogram import Router, F
 from aiogram.filters import Command
 from aiogram.types import Message, CallbackQuery, BufferedInputFile
@@ -8,6 +7,7 @@ from db.engine import async_session
 from db.repository import TransactionRepository
 from keyboards.inline import tracker_keyboard, main_menu
 from templates.categories import CATEGORIES_RU
+from utils.timezone import now as tz_now
 
 router = Router()
 
@@ -91,7 +91,7 @@ async def cmd_stats(message: Message):
     async with async_session() as session:
         repo = TransactionRepository(session)
         stats = await repo.get_month_stats(message.from_user.id)
-    now = datetime.utcnow()
+    now = tz_now()
     sr = ((stats["income"] - stats["expense"]) / stats["income"] * 100) if stats["income"] > 0 else 0
     sr_emoji = "✅" if sr >= 30 else "⚠️" if sr >= 15 else "🚨"
     await message.answer(
@@ -115,7 +115,7 @@ async def cmd_today(message: Message):
         sub_repo = RecurringRepository(session)
         sub_total = await sub_repo.get_monthly_total(message.from_user.id)
 
-    lines = [f"📊 Сегодня — {datetime.utcnow().strftime('%d.%m.%Y')}\n"]
+    lines = [f"📊 Сегодня — {tz_now().strftime('%d.%m.%Y')}\n"]
 
     if today["txs"]:
         for tx in today["txs"]:
@@ -202,7 +202,7 @@ async def cb_tracker_stats(callback: CallbackQuery):
     async with async_session() as session:
         repo = TransactionRepository(session)
         stats = await repo.get_month_stats(callback.from_user.id)
-    now = datetime.utcnow()
+    now = tz_now()
     sr = ((stats["income"] - stats["expense"]) / stats["income"] * 100) if stats["income"] > 0 else 0
     sr_emoji = "✅" if sr >= 30 else "⚠️" if sr >= 15 else "🚨"
     await callback.message.answer(
@@ -237,3 +237,86 @@ async def cb_tracker_export(callback: CallbackQuery):
     file = BufferedInputFile(buf.getvalue().encode(), filename="finance_export.csv")
     await callback.message.answer_document(file, caption=f"📊 Экспорт: {len(txs)} операций")
     await callback.answer()
+
+
+# === БЫСТРЫЕ КОМАНДЫ ===
+
+@router.message(Command("e"))
+async def cmd_e(message: Message):
+    """Быстрый расход: /e 500 еда"""
+    parts = message.text.split(maxsplit=2)
+    if len(parts) < 2:
+        await message.answer("Формат: /e 500 еда")
+        return
+    try:
+        amount = float(parts[1])
+    except ValueError:
+        await message.answer("Неверная сумма")
+        return
+    category = parts[2] if len(parts) > 2 else "другое"
+    async with async_session() as session:
+        repo = TransactionRepository(session)
+        await repo.add(message.from_user.id, "expense", amount, category)
+    await message.answer(f"💸 -{amount:,.0f}₽ ({category})")
+
+
+@router.message(Command("i"))
+async def cmd_i(message: Message):
+    """Быстрый доход: /i 50000 зарплата"""
+    parts = message.text.split(maxsplit=2)
+    if len(parts) < 2:
+        await message.answer("Формат: /i 50000 зарплата")
+        return
+    try:
+        amount = float(parts[1])
+    except ValueError:
+        await message.answer("Неверная сумма")
+        return
+    category = parts[2] if len(parts) > 2 else "другое"
+    async with async_session() as session:
+        repo = TransactionRepository(session)
+        await repo.add(message.from_user.id, "income", amount, category)
+    await message.answer(f"💰 +{amount:,.0f}₽ ({category})")
+
+
+@router.message(Command("inv"))
+async def cmd_inv(message: Message):
+    """Быстрая инвестиция: /inv 10000 etf"""
+    parts = message.text.split(maxsplit=2)
+    if len(parts) < 2:
+        await message.answer("Формат: /inv 10000 etf")
+        return
+    try:
+        amount = float(parts[1])
+    except ValueError:
+        await message.answer("Неверная сумма")
+        return
+    category = parts[2] if len(parts) > 2 else "другое"
+    async with async_session() as session:
+        repo = TransactionRepository(session)
+        await repo.add(message.from_user.id, "investment", amount, category)
+    await message.answer(f"📈 +{amount:,.0f}₽ ({category})")
+
+
+@router.message(Command("s"))
+async def cmd_s(message: Message):
+    """Быстрая статистика"""
+    await cmd_stats(message)
+
+
+@router.message(Command("undo"))
+async def cmd_undo(message: Message):
+    """Отмена последней операции"""
+    async with async_session() as session:
+        repo = TransactionRepository(session)
+        deleted = await repo.delete_last(message.from_user.id)
+    if deleted:
+        cat_label = CATEGORIES_RU.get(deleted.category, deleted.category)
+        sign = "+" if deleted.type == "income" else "-"
+        await message.answer(
+            f"↩️ Удалена операция:\n"
+            f"{sign}{deleted.amount:,.0f}₽ — {cat_label}\n"
+            f"📅 {deleted.date.strftime('%d.%m.%Y %H:%M')}"
+        )
+    else:
+        await message.answer("Нет операций для отмены.")

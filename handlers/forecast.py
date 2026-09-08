@@ -8,6 +8,7 @@ from keyboards.inline import main_menu
 from services.forecasting import project_end_of_month, calculate_runway, savings_trajectory, format_runway, format_trajectory
 from services.calculator import format_currency
 from services.charts import forecast_trajectory
+from utils.timezone import now as tz_now
 
 router = Router()
 
@@ -52,7 +53,7 @@ async def forecast_end_of_month(callback: CallbackQuery):
         sub_repo = RecurringRepository(session)
         recurring_total = await sub_repo.get_monthly_total(user_id)
 
-    now = __import__('datetime').datetime.utcnow()
+    now = tz_now()
     days_in_month = 30
     days_remaining = days_in_month - now.day
     day_of_month = now.day
@@ -60,8 +61,14 @@ async def forecast_end_of_month(callback: CallbackQuery):
     daily_income = month_stats["income"] / day_of_month if day_of_month > 0 else 0
     daily_expense = month_stats["expense"] / day_of_month if day_of_month > 0 else 0
 
+    # Get real balance from user profile
+    async with async_session() as session:
+        user_repo = UserRepository(session)
+        user = await user_repo.get(user_id)
+    balance = (user.assets or 0) - (user.debts or 0) if user else 0
+
     result = project_end_of_month(
-        current_balance=0,
+        current_balance=balance,
         daily_income=daily_income,
         daily_expenses=daily_expense,
         days_remaining=days_remaining,

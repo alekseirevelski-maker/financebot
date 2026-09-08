@@ -11,3 +11,4 @@ pytesseract>=0.3.10
 Pillow>=10.0.0
 matplotlib>=3.8.0
 reportlab>=4.0.0
+aiohttp-socks>=0.8.0

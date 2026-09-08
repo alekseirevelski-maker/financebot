@@ -6,6 +6,7 @@ from reportlab.lib.pagesizes import A4
 from reportlab.lib.units import cm
 from reportlab.pdfgen import canvas
 from reportlab.lib import colors
+from utils.timezone import now as tz_now
 
 
 def generate_monthly_report(user_data: dict, tx_stats: dict, budget_data: list, savings_data: dict) -> io.BytesIO:
@@ -18,7 +19,7 @@ def generate_monthly_report(user_data: dict, tx_stats: dict, budget_data: list, 
     c.setFont("Helvetica-Bold", 18)
     c.drawString(2*cm, height - 3*cm, "Financial Report")
     c.setFont("Helvetica", 12)
-    c.drawString(2*cm, height - 4*cm, f"Month: {datetime.utcnow().strftime('%B %Y')}")
+    c.drawString(2*cm, height - 4*cm, f"Month: {tz_now().strftime('%B %Y')}")
 
     # Summary
     y = height - 6*cm
@@ -80,7 +81,7 @@ def generate_weekly_report(user_data: dict, tx_stats: dict) -> io.BytesIO:
     c.setFont("Helvetica-Bold", 18)
     c.drawString(2*cm, height - 3*cm, "Weekly Report")
     c.setFont("Helvetica", 12)
-    now = datetime.utcnow()
+    now = tz_now()
     week_start = now - __import__('datetime').timedelta(days=now.weekday())
     c.drawString(2*cm, height - 4*cm, f"{week_start.strftime('%d.%m')} - {now.strftime('%d.%m.%Y')}")
 

@@ -1,10 +1,10 @@
 """Background jobs for APScheduler — reminder delivery."""
 
-from datetime import datetime
 from aiogram import Bot
 from loguru import logger
 from db.engine import async_session
 from db.repository import ReminderRepository
+from utils.timezone import now as tz_now
 
 REMINDER_TEXTS = {
     "daily": "📋 Какой твой главный финансовый шаг сегодня?",
@@ -16,7 +16,7 @@ REMINDER_TEXTS = {
 
 async def check_reminders(bot: Bot):
     """Check all active reminders and send if their time matches."""
-    now = datetime.utcnow()
+    now = tz_now()
     current_minute = now.hour * 60 + now.minute
 
     async with async_session() as session:

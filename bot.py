@@ -8,6 +8,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from loguru import logger
 from config import BOT_TOKEN, PROXY_URL
 from db.engine import init_db
+from middlewares.access import AccessMiddleware
 from middlewares.throttling import ThrottleMiddleware
 from handlers import start, survey, plan, tracker, reminders, wisdom, compound, profile, photo, recurring, savings, budget, analytics, reports, forecast
 from services.scheduler_jobs import check_reminders
@@ -18,19 +19,44 @@ async def main():
         logger.error("BOT_TOKEN не задан!")
         return
 
-    # Set proxy env vars (same pattern as working bots)
-    if PROXY_URL:
-        os.environ["http_proxy"] = PROXY_URL
-        os.environ["https_proxy"] = PROXY_URL
-        logger.info("Прокси: %s", PROXY_URL)
-
     await init_db()
     logger.info("БД инициализирована")
 
-    bot = Bot(token=BOT_TOKEN)
+    # Bot creation with proxy support
+    if PROXY_URL:
+        if PROXY_URL.startswith("socks5"):
+            try:
+                from aiohttp_socks import SocksConnector, SocksVer
+                host = PROXY_URL.split("//")[1].split(":")[0]
+                port = int(PROXY_URL.split(":")[-1].split("/")[0])
+                connector = SocksConnector(
+                    socks_ver=SocksVer.SOCKS5,
+                    host=host,
+                    port=port,
+                )
+                session = AiohttpSession(connector=connector)
+                bot = Bot(token=BOT_TOKEN, session=session)
+                logger.info("SOCKS5 proxy: %s", PROXY_URL)
+            except ImportError:
+                logger.warning("aiohttp-socks not installed, using env vars for proxy")
+                os.environ["http_proxy"] = PROXY_URL
+                os.environ["https_proxy"] = PROXY_URL
+                bot = Bot(token=BOT_TOKEN)
+        else:
+            session = AiohttpSession(proxy=PROXY_URL)
+            bot = Bot(token=BOT_TOKEN, session=session)
+            logger.info("HTTP proxy: %s", PROXY_URL)
+    else:
+        bot = Bot(token=BOT_TOKEN)
+        logger.info("No proxy — direct connection")
+
     dp = Dispatcher(storage=MemoryStorage())
 
-    dp.message.middleware(ThrottleMiddleware(limit=0.5))
+    # Access control — BEFORE everything else
+    dp.message.outer_middleware(AccessMiddleware())
+    dp.callback_query.outer_middleware(AccessMiddleware())
+
+    dp.message.middleware(ThrottleMiddleware(limit=1.0))
 
     dp.include_routers(
         start.router,
@@ -50,17 +76,18 @@ async def main():
         forecast.router,
     )
 
-    logger.info("Бот запущен в режиме polling")
-
     scheduler = AsyncIOScheduler()
     scheduler.add_job(check_reminders, "interval", minutes=5, args=[bot])
     scheduler.start()
     logger.info("APScheduler запущен — напоминания каждые 5 мин")
 
+    logger.info("Бот запущен в режиме polling")
     try:
         await dp.start_polling(bot)
     finally:
-        scheduler.shutdown()
+        scheduler.shutdown(wait=True)
+        await bot.session.close()
+        logger.info("Бот остановлен")
 
 
 if __name__ == "__main__":

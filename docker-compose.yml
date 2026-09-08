@@ -2,8 +2,18 @@ services:
   bot:
     build:
       context: .
-      dockerfile: finance_bot/Dockerfile
-    env_file: finance_bot/.env
+      dockerfile: Dockerfile
+    container_name: financebot
+    env_file: .env
     volumes:
-      - ./data:/app/finance_bot/data
+      - ./data:/app/data
+      - ./backups:/app/backups
     restart: always
+    network_mode: host
+    environment:
+      - TZ=Europe/Moscow
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"

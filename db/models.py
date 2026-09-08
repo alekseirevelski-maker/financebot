@@ -1,5 +1,6 @@
 from datetime import datetime
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
+from utils.timezone import now
 
 
 class Base(DeclarativeBase):
@@ -27,8 +28,8 @@ class User(Base):
     phase: Mapped[str]
     survey_completed: Mapped[bool] = mapped_column(default=False)
     plan_generated: Mapped[bool] = mapped_column(default=False)
-    created_at: Mapped[datetime] = mapped_column(default=lambda: datetime.utcnow())
-    updated_at: Mapped[datetime] = mapped_column(default=lambda: datetime.utcnow())
+    created_at: Mapped[datetime] = mapped_column(default=now)
+    updated_at: Mapped[datetime] = mapped_column(default=now)
 
 
 class Transaction(Base):
@@ -54,7 +55,7 @@ class RecurringPayment(Base):
     category: Mapped[str]
     day_of_month: Mapped[int]
     is_active: Mapped[bool] = mapped_column(default=True)
-    created_at: Mapped[datetime] = mapped_column(default=lambda: datetime.utcnow())
+    created_at: Mapped[datetime] = mapped_column(default=now)
 
 
 class Reminder(Base):
@@ -77,7 +78,7 @@ class SavingsGoal(Base):
     current_amount: Mapped[float] = mapped_column(default=0.0)
     deadline: Mapped[str | None]
     is_completed: Mapped[bool] = mapped_column(default=False)
-    created_at: Mapped[datetime] = mapped_column(default=lambda: datetime.utcnow())
+    created_at: Mapped[datetime] = mapped_column(default=now)
 
 
 class Budget(Base):
@@ -88,4 +89,4 @@ class Budget(Base):
     category: Mapped[str]
     monthly_limit: Mapped[float]
     is_active: Mapped[bool] = mapped_column(default=True)
-    created_at: Mapped[datetime] = mapped_column(default=lambda: datetime.utcnow())
+    created_at: Mapped[datetime] = mapped_column(default=now)

@@ -3,6 +3,7 @@ from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from db.engine import async_session
 from db.models import User, Transaction, Reminder, RecurringPayment, SavingsGoal, Budget
+from utils.timezone import now as tz_now
 
 
 class UserRepository:
@@ -30,7 +31,7 @@ class UserRepository:
         if user:
             for key, value in kwargs.items():
                 setattr(user, key, value)
-            user.updated_at = datetime.utcnow()
+            user.updated_at = tz_now()
             await self.session.commit()
 
     async def get_all(self) -> list[User]:
@@ -49,7 +50,7 @@ class TransactionRepository:
         return tx
 
     async def get_month_stats(self, user_id: int) -> dict:
-        now = datetime.utcnow()
+        now = tz_now()
         start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
         result = await self.session.execute(
             select(Transaction).where(Transaction.user_id == user_id, Transaction.date >= start)
@@ -61,7 +62,7 @@ class TransactionRepository:
         return {"income": income, "expense": expense, "investment": invest, "count": len(txs)}
 
     async def get_week_stats(self, user_id: int) -> dict:
-        start = datetime.utcnow() - timedelta(days=7)
+        start = tz_now() - timedelta(days=7)
         result = await self.session.execute(
             select(Transaction).where(Transaction.user_id == user_id, Transaction.date >= start)
         )
@@ -72,7 +73,7 @@ class TransactionRepository:
         return {"income": income, "expense": expense, "investment": invest, "count": len(txs)}
 
     async def get_today_stats(self, user_id: int) -> dict:
-        now = datetime.utcnow()
+        now = tz_now()
         start = now.replace(hour=0, minute=0, second=0, microsecond=0)
         result = await self.session.execute(
             select(Transaction).where(
@@ -91,8 +92,18 @@ class TransactionRepository:
         )
         return list(result.scalars().all())
 
+    async def delete_last(self, user_id: int) -> Transaction | None:
+        result = await self.session.execute(
+            select(Transaction).where(Transaction.user_id == user_id).order_by(Transaction.date.desc()).limit(1)
+        )
+        tx = result.scalar_one_or_none()
+        if tx:
+            await self.session.delete(tx)
+            await self.session.commit()
+        return tx
+
     async def get_expenses_by_category(self, user_id: int, months: int = 1) -> dict[str, float]:
-        now = datetime.utcnow()
+        now = tz_now()
         start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
         if months > 1:
             start = start - timedelta(days=30 * (months - 1))
@@ -110,7 +121,7 @@ class TransactionRepository:
         return dict(sorted(by_cat.items(), key=lambda x: x[1], reverse=True))
 
     async def get_monthly_totals(self, user_id: int, months: int = 6) -> list[dict]:
-        now = datetime.utcnow()
+        now = tz_now()
         results = []
         for i in range(months - 1, -1, -1):
             year = now.year
@@ -154,7 +165,7 @@ class TransactionRepository:
         return history
 
     async def get_comparison_data(self, user_id: int) -> dict:
-        now = datetime.utcnow()
+        now = tz_now()
         current_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
         if now.month == 1:
             prev_start = datetime(now.year - 1, 12, 1)
@@ -222,7 +233,7 @@ class RecurringRepository:
         return sum(rp.amount for rp in active)
 
     async def get_today_payments(self, user_id: int) -> list[RecurringPayment]:
-        today = datetime.utcnow().day
+        today = tz_now().day
         active = await self.get_active(user_id)
         return [rp for rp in active if rp.day_of_month == today]
 
@@ -377,7 +388,7 @@ class BudgetRepository:
 
     async def get_spending_vs_budget(self, user_id: int) -> list[dict]:
         budgets = await self.get_budgets(user_id)
-        now = datetime.utcnow()
+        now = tz_now()
         start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
         result = await self.session.execute(
             select(Transaction).where(
